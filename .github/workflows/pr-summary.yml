@@ -76,7 +76,7 @@ jobs:
           // Using Mistral API via Hugging Face Inference
           (async () => {
             try {
-              const response = await fetch("https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1", {
+              const response = await fetch("https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2", {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
