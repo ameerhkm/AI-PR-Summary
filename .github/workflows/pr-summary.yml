@@ -44,12 +44,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24' # ◄ Upgraded to Node 24 to match runner defaults
+          node-version: '24'
 
       - name: Initialize Package and Install SDK
         run: |
           npm init -y
-          npm pkg set type="module" # ◄ Tells Node to allow clean Top-Level Awaits
+          npm pkg set type="module"
           npm install @google/genai
 
       - name: Create AI summary with Gemini
@@ -82,7 +82,6 @@ jobs:
           Format your output strictly as clean, friendly GitHub markdown. Keep it under 400 words.`;
           
           try {
-            // ◄ Linear, synchronous evaluation prevents background process race dropouts
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash',
               contents: prompt,
@@ -92,7 +91,6 @@ jobs:
               throw new Error("Empty text string returned from the Gemini endpoint.");
             }
             
-            // Write output directly to the targeted output file
             fs.writeFileSync("/tmp/summary_final.txt", response.text);
           } catch (error) {
             console.error("Error generating Gemini summary:", error.message);
@@ -100,9 +98,10 @@ jobs:
           }
           EOF
           
-          // Execute script and pass results back safely to pipeline buffers
+          # Execute the JavaScript file using Node
           node generate_summary.js
           
+          # Safely export the text back to GitHub Actions output parameters
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           cat /tmp/summary_final.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
