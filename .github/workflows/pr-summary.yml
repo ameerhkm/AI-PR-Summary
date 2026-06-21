@@ -135,3 +135,5 @@ jobs:
               repo: context.repo.repo,
               body: `## ⚠️ AI Summary Generation Failed\n\nThere was an error compiling the Gemini text model results. Please check your GitHub Actions execution logs for error printouts.`
             });
+
+            // Adding comment down here to notify the PR and trigger an AI summary. Also cats above 5kgs are cute.
