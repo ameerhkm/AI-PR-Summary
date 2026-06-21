@@ -1,6 +1,7 @@
-name: AI PR Summary with Mistral
+name: AI PR Summary with Gemini
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
@@ -31,11 +32,9 @@ jobs:
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_BODY="${{ github.event.pull_request.body }}"
           
-          # Get the diff between PR branches
           git fetch origin ${{ github.event.pull_request.head.ref }}
           DIFF=$(git diff origin/${{ github.event.pull_request.base.ref }}...origin/${{ github.event.pull_request.head.ref }} --stat)
           
-          # Store in files for next step
           echo "$PR_TITLE" > /tmp/pr_title.txt
           echo "$PR_BODY" > /tmp/pr_body.txt
           echo "$DIFF" > /tmp/pr_diff.txt
@@ -45,21 +44,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24' # ◄ Upgraded to Node 24 to match runner defaults
 
-      - name: Create AI summary with Mistral
+      - name: Initialize Package and Install SDK
+        run: |
+          npm init -y
+          npm pkg set type="module" # ◄ Tells Node to allow clean Top-Level Awaits
+          npm install @google/genai
+
+      - name: Create AI summary with Gemini
         id: summary
         env:
-          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          cat > /tmp/generate_summary.js << 'EOF'
-          const fs = require("fs");
+          cat > generate_summary.js << 'EOF'
+          import fs from "fs";
+          import { GoogleGenAI } from "@google/genai";
+
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
           
           const title = fs.readFileSync("/tmp/pr_title.txt", "utf8").trim();
           const body = fs.readFileSync("/tmp/pr_body.txt", "utf8").trim();
           const diff = fs.readFileSync("/tmp/pr_diff.txt", "utf8").trim();
           
-          const prompt = `You are a helpful code reviewer. Generate a concise GitHub PR summary comment based on:
+          const prompt = `You are an expert DevOps engineer and code reviewer. Generate a concise GitHub PR summary comment based on:
           
           PR Title: ${title}
           PR Description: ${body}
@@ -71,53 +79,32 @@ jobs:
           3. Impact assessment
           4. Any potential concerns or considerations
           
-          Format as a GitHub markdown comment (friendly and constructive). Keep it under 500 words.`;
+          Format your output strictly as clean, friendly GitHub markdown. Keep it under 400 words.`;
           
-          // Using Mistral API via Hugging Face Inference
-          (async () => {
-            try {
-              const response = await fetch("https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`
-                },
-                body: JSON.stringify({
-                  inputs: prompt,
-                  parameters: {
-                    max_new_tokens: 500,
-                    temperature: 0.7,
-                    top_p: 0.9
-                  }
-                })
-              });
-              
-              if (!response.ok) {
-                const error = await response.text();
-                throw new Error(`Mistral API error: ${response.status} - ${error}`);
-              }
-              
-              const data = await response.json();
-              let summary = data[0].generated_text;
-              
-              // Remove the prompt from the output
-              if (summary.includes(prompt)) {
-                summary = summary.replace(prompt, "").trim();
-              }
-              
-              console.log(summary);
-            } catch (error) {
-              console.error("Error generating summary:", error.message);
-              process.exit(1);
+          try {
+            // ◄ Linear, synchronous evaluation prevents background process race dropouts
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+            });
+            
+            if (!response.text) {
+              throw new Error("Empty text string returned from the Gemini endpoint.");
             }
-          })();
+            
+            // Write output directly to the targeted output file
+            fs.writeFileSync("/tmp/summary_final.txt", response.text);
+          } catch (error) {
+            console.error("Error generating Gemini summary:", error.message);
+            process.exit(1);
+          }
           EOF
           
-          node /tmp/generate_summary.js > /tmp/summary_output.txt 2>&1
+          // Execute script and pass results back safely to pipeline buffers
+          node generate_summary.js
           
-          SUMMARY=$(cat /tmp/summary_output.txt)
           echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          cat /tmp/summary_final.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post summary as comment
@@ -126,12 +113,13 @@ jobs:
         with:
           script: |
             const summary = `${{ steps.summary.outputs.summary }}`;
+            const issueNumber = context.issue.number || ${{ steps.pr_details.outputs.pr_number }} || 1;
             
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🤖 AI-Generated PR Summary (Powered by Mistral)\n\n${summary}\n\n---\n*Generated by Mistral AI via Hugging Face*`
+              body: `## 🤖 AI-Generated PR Summary (Powered by Google Gemini)\n\n${summary}\n\n---\n*Generated using Gemini 2.5 Flash on the free developer tier.*`
             });
 
       - name: Handle errors
@@ -139,9 +127,10 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issueNumber = context.issue.number || ${{ steps.pr_details.outputs.pr_number }} || 1;
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ⚠️ AI Summary Generation Failed\n\nThere was an error generating the AI summary for this PR. Please check the workflow logs for details.`
+              body: `## ⚠️ AI Summary Generation Failed\n\nThere was an error compiling the Gemini text model results. Please check your GitHub Actions execution logs for error printouts.`
             });
