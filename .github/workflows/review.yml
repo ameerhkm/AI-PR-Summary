@@ -1,0 +1,14 @@
+# target-repo/.github/workflows/review.yml
+name: AI Code Review
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    uses: your-org/devops-workflows/.github/workflows/review.yml@main   # ← points to central repo
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
