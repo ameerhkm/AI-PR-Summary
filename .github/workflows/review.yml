@@ -9,6 +9,6 @@ on:
 
 jobs:
   analyze:
-    uses: your-org/devops-workflows/.github/workflows/review.yml@main   # ← points to central repo
+    uses: ameerhkm/central-compliance-tool/.github/workflows/review.yml@main   # ← points to central repo
     secrets:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
