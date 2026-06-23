@@ -1,4 +1,3 @@
-# target-repo/.github/workflows/review.yml
 name: AI Code Review
 
 on:
@@ -6,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
+# This tells GitHub the called workflow is allowed to write PR comments
+# Without this the permission is blocked at the org/repo level
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   analyze:
